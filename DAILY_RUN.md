@@ -22,6 +22,12 @@ Use WebSearch/WebFetch. Check several of these sources: News24, SABC News, IOL, 
 
 Pick **5 stories** from the last 24 hours, roughly in this mix: the day's biggest national story, then politics/government, economy/business/money (rand, fuel, interest rates, load-shedding, jobs), a local or community story (service delivery, a city or province), and something lighter (sport, entertainment, a good-news story).
 
+**Always check these two, and include them whenever they change:**
+- **Petrol and diesel prices.** The Department of Mineral and Petroleum Resources announces changes, usually in the last days of the month, and they take effect on the first Wednesday of the month. When a change is announced or takes effect today or yesterday, include it as a story: increase or decrease, cents per litre for 95 petrol (inland) and diesel, and the date it applies from. Also include it when the mid-month data (Central Energy Fund) points clearly to a big increase or decrease, worded as "early data suggests…".
+- **Interest rates.** When the SARB Monetary Policy Committee announces a repo rate decision (cut, hike or hold), include it: the change in basis points, the new repo and prime rates, and one line on what it means for home and car repayments. Also include major-bank prime rate changes that follow.
+
+These count toward the 5 stories (they replace the economy slot, or bump the weakest story). Use the official numbers from the announcement, confirmed by at least 2 outlets. For these stories, use a scene with a neon fuel pump (petrol) or a % sign/rate chart (interest rates), a big up arrow (red) or down arrow (green), and `big_stat` showing the cents per litre or basis points, with the `breaking` sound preset.
+
 Rules:
 - Every fact must be confirmed by at least 2 reputable sources, or come from 1 primary source (government, IEC, SARB, Stats SA, police statement). Leave out anything you can't confirm.
 - Neutral, factual tone. No opinion, no speculation, no loaded words. Report what each side says.
@@ -58,7 +64,7 @@ Run `python3 tts.py`. Check each segment's length; if the total from `python3 co
   `story_header(crisp, neon, s, <n>, "<TAG>", ["<headline line 1>", "<line 2>"], <accent>)`
   (TAG is a short uppercase category, headline lines at most about 18 characters each), then draws one neon line-art icon/illustration in the card area (y about 600–1050) using the existing helpers (`poly_partial`, `iline`, `icircle`, `cv2` shapes on the `neon` layer with `col()`), plus optional `big_stat(...)` and `chip(...)` lines that appear in time with the voiceover (`info["vo_start"] + seconds`).
 - Reuse and adapt the existing scenes wherever they fit: `sc_vote` (ballot box: elections/voting), `sc_agoa` (trade/arrows: economy, international), `sc_water` (water drop: utilities/municipal), `sc_film` (clapperboard: arts/entertainment), `sc_rugby` (ball/players: sport). For other topics, write a new scene in the same style (for example: rand/coin chart for money, lightning bolt for electricity, fuel pump, police light, house, school, hospital cross, cloud/rain for weather, gavel for courts, globe for world news). Keep it simple, clean and centred, the same neon-outline look.
-- Leave the intro, outro, HUD, logo, ticker style, captions, background and transitions alone.
+- Leave the intro, outro, HUD, logo, ticker style, captions, background and transitions alone. Don't change `Y_SHIFT` in `common.py`: it moves everything down so the top bar clears Instagram's "Reels / Friends" header and the ticker sits just above the username. Keep scene content between y≈230 and y≈1460 (before the shift) so nothing hits those areas.
 
 ## 6. Check, then render
 

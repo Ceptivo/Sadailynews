@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from common import DIR, OUT, FPS, ORDER, EPISODE, caption_times, timeline
+from common import DIR, OUT, FPS, ORDER, EPISODE, Y_SHIFT, caption_times, timeline
 
 W, H = 1080, 1920
 AA = cv2.LINE_AA
@@ -145,6 +145,8 @@ def make_bg():
 
 
 BG = make_bg()
+# scenes are drawn on a background raised by Y_SHIFT, then the frame is moved down by Y_SHIFT
+BG_R = np.vstack([BG[Y_SHIFT:], np.repeat(BG[-1:], Y_SHIFT, axis=0)]) if Y_SHIFT else BG
 
 rng = np.random.default_rng(7)
 PART = np.column_stack([rng.uniform(0, W, 34), rng.uniform(0, H, 34), rng.uniform(8, 30, 34),
@@ -720,7 +722,7 @@ def frame(key, i):
     s = i / FPS
     T = info["start"] + s
     accent = ACCENT[key]
-    base = BG.copy()
+    base = BG_R.copy()
     neon = np.zeros((H, W, 3), np.uint8)
     crisp = np.zeros((H, W, 3), np.uint8)  # drawn with alpha onto final
     crisp_layer = np.zeros((H, W, 4), np.uint8)
@@ -738,6 +740,8 @@ def frame(key, i):
     out = cv2.add(base, neon)
     out = cv2.add(out, glow(neon))
     holder.apply(out)
+    if Y_SHIFT:
+        out = np.vstack([BG[:Y_SHIFT], out[:H - Y_SHIFT]])
     out = wipe(out, s, accent)
     if key == "outro":
         fade = prog(s, info["dur"] - 0.5, 0.5)

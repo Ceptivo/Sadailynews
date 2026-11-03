@@ -7,6 +7,10 @@ OUT = os.path.join(DIR, "build")
 os.makedirs(OUT, exist_ok=True)
 FPS = 30
 
+# Everything except the background is drawn this many pixels lower, so the top bar clears
+# Instagram's "Reels / Friends" header and the ticker sits just above the username.
+Y_SHIFT = 90
+
 # ---- channel branding (same every episode) ----
 BRAND = "SA Daily Brief"
 # ---- episode settings (change every episode) ----
