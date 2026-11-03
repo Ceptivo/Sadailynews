@@ -82,12 +82,14 @@ Same format as this example:
 <emoji> <story 2>
 … (all 5)
 
-Follow for tomorrow's update 🔔
+Follow @sadailybrief for tomorrow's update 🔔
 
 Sources: <outlets>
 
 #SADailyBrief #SouthAfrica #SANews #Mzansi #NewsUpdate <4–7 story-specific hashtags>
 ```
+
+Every caption must include the follow line with the real handle **@sadailybrief**. Never use a placeholder like "@your handle" or "[handle]".
 
 ## 8. Deliver
 
