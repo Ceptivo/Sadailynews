@@ -1,0 +1,5 @@
+models/
+build/
+__pycache__/
+*.mp4
+caption.txt
