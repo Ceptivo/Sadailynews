@@ -326,7 +326,7 @@ def draw_caption(crisp, key, info, s):
 
 
 def tag_text_color(accent):
-    return WHITE if accent in (MAG, RED) else NAVY
+    return WHITE if accent in (MAG, RED, BLUE) else NAVY
 
 
 def story_header(crisp, neon, s, num, tag, lines, accent):
@@ -668,6 +668,132 @@ def sc_rugby(neon, crisp, s, T, info):
     for i, c in enumerate(["ITALY", "FRANCE", "IRELAND"]):
         w = chip(crisp, c, x, 1265 - 220, s, t0 + i * 0.45, GOLD, size=28)
         x += (w or 170) + 14
+
+
+# ---- reusable scene library (from earlier episodes; adapt the text, register in SCENES) ----
+def sc_weather(neon, crisp, s, T, info):
+    story_header(crisp, neon, s, 2, "WEATHER", ["Storms and heat", "on voting day"], CYAN)
+    p = ease_back(prog(s, 0.3, 0.6))
+    if p <= 0:
+        return
+    # cloud outline from overlapping circles
+    cx, cy = 430, 760
+    m = np.zeros((H, W), np.uint8)
+    for dx, dy, r in [(-120, 30, 80), (-30, -20, 110), (90, 10, 90), (0, 60, 90), (150, 55, 60), (-170, 70, 55)]:
+        cv2.circle(m, (int(cx + dx * p), int(cy + dy * p)), max(1, int(r * p)), 255, -1)
+    cv2.rectangle(m, (0, int(cy + 115 * p)), (W, H), 0, -1)
+    cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    for c in cnts:
+        cv2.polylines(neon, [c], True, col(CYAN, 1.0), 5, AA)
+    # rain
+    for k in range(9):
+        x = cx - 170 + k * 42
+        u = ((s * 1.4 + k * 0.37) % 1.0)
+        y = cy + 130 + u * 170
+        iline(neon, (x, y), (x - 10, y + 32), col(CYAN, 0.6 * (1 - u) * p), 3)
+    # lightning bolt, flashing on a beat
+    t0 = 0.8
+    if s > t0:
+        flash = 1.6 if (int((s - t0) * 3) % 3 == 0) else 0.7
+        bolt = np.array([[cx + 10, cy + 70], [cx - 40, cy + 190], [cx + 5, cy + 190], [cx - 35, cy + 300],
+                         [cx + 70, cy + 160], [cx + 25, cy + 160], [cx + 60, cy + 70]], np.float32)
+        cv2.fillPoly(neon, [(bolt * 4).astype(np.int32)], col(GOLD, 0.25 * flash), AA, shift=2)
+        cv2.polylines(neon, [(bolt * 4).astype(np.int32)], True, col(GOLD, flash), 5, AA, shift=2)
+    # sun for the heat
+    q = ease_back(prog(s, info["vo_start"] + 4.6, 0.5))
+    if q > 0:
+        sx, sy = 800, 720
+        icircle(neon, (sx, sy), 70 * q, col(RED, 1.1), 6)
+        icircle(neon, (sx, sy), 50 * q, col(GOLD, 0.5), 3)
+        for i in range(12):
+            ang = math.radians(i * 30 + T * 30)
+            r1, r2 = 92 * q, (122 + 10 * math.sin(T * 6 + i)) * q
+            iline(neon, (sx + math.cos(ang) * r1, sy + math.sin(ang) * r1),
+                  (sx + math.cos(ang) * r2, sy + math.sin(ang) * r2), col(GOLD, 1.0), 5)
+    chip(crisp, "LEVEL 4 STORMS · MPUMALANGA & NW KZN", 80, 1100, s, info["vo_start"] + 1.2, GOLD, size=28)
+    chip(crisp, "EXTREME HEAT · WESTERN & NORTHERN CAPE", 80, 1195, s, info["vo_start"] + 5.0, RED, size=28)
+
+
+def sc_fuel(neon, crisp, s, T, info):
+    story_header(crisp, neon, s, 3, "FUEL PRICES", ["Diesel down,", "petrol barely"], MAG)
+    p = ease_back(prog(s, 0.3, 0.5))
+    if p <= 0:
+        return
+    # pump body, screen, nozzle and hose
+    x0, y0, w, h = 300, 640, int(240 * p), int(380 * p)
+    cv2.rectangle(neon, (x0, y0), (x0 + w, y0 + h), col(MAG, 1.0), 6, AA)
+    cv2.rectangle(neon, (x0 + int(30 * p), y0 + int(36 * p)), (x0 + w - int(30 * p), y0 + int(130 * p)), col(WHITE, 0.8), 3, AA)
+    iline(neon, (x0 - 30, y0 + h), (x0 + w + 30, y0 + h), col(MAG, 0.8), 5)
+    iline(neon, (x0 + 40 * p, y0 + 180 * p), (x0 + w - 40 * p, y0 + 180 * p), col(WHITE, 0.4), 3)
+    iline(neon, (x0 + 40 * p, y0 + 220 * p), (x0 + w - 40 * p, y0 + 220 * p), col(WHITE, 0.4), 3)
+    tt = np.linspace(0, 1, 40)[:, None]
+    a_, c_, b_ = np.array([x0 + w, y0 + 60 * p]), np.array([x0 + w + 140 * p, y0 + 60 * p]), np.array([x0 + w + 80 * p, y0 + 260 * p])
+    hose = ((1 - tt) ** 2) * a_ + 2 * (1 - tt) * tt * c_ + (tt ** 2) * b_
+    poly_partial(neon, hose.astype(np.float32), 1, col(MAG, 0.9), 5)
+    noz = np.array([b_, b_ + [-30 * p, 20 * p], b_ + [-30 * p, 70 * p], b_ + [10 * p, 70 * p], b_ + [10 * p, 10 * p]], np.float32)
+    cv2.polylines(neon, [(noz * 4).astype(np.int32)], False, col(MAG, 1.0), 5, AA, shift=2)
+    if p > 0.6:
+        sc = text_sprite("-1c", F_BLACK, 52, WHITE)
+        blit(crisp, sc, x0 + w / 2 - sc.shape[1] / 2, y0 + 50)
+    # bobbing down arrow
+    q = ease_out(prog(s, info["vo_start"] + 1.4, 0.5))
+    if q > 0:
+        ax, ay = 790, 720 + 12 * math.sin(T * 5)
+        L = 190 * q
+        iline(neon, (ax, ay), (ax, ay + L), col(GREEN, 1.2), 12)
+        iline(neon, (ax - 60, ay + L - 60), (ax, ay + L), col(GREEN, 1.2), 12)
+        iline(neon, (ax + 60, ay + L - 60), (ax, ay + L), col(GREEN, 1.2), 12)
+    chip(crisp, "DIESEL: DOWN OVER R1 A LITRE", 80, 1100, s, info["vo_start"] + 1.6, GREEN, size=30)
+    chip(crisp, "PETROL: DOWN 1c   ·   PARAFFIN: UP", 80, 1195, s, info["vo_start"] + 4.6, RED, size=28)
+
+
+def sc_parliament(neon, crisp, s, T, info):
+    story_header(crisp, neon, s, 4, "PARLIAMENT", ["NCOP Secretary", "dies suddenly"], BLUE)
+    p = ease_out(prog(s, 0.3, 1.2))
+    if p <= 0:
+        return
+    cx, top = 540, 640
+    ped = np.array([[cx - 230, top + 90], [cx, top], [cx + 230, top + 90]], np.float32)
+    poly_partial(neon, ped, p, col(WHITE, 0.9), 5)
+    if p > 0.3:
+        q = (p - 0.3) / 0.7
+        cv2.rectangle(neon, (cx - 240, top + 90), (cx + 240, top + 125), col(BLUE, 0.9 * q + 0.1), 4, AA)
+        for i in range(6):
+            x = cx - 200 + i * 80
+            iline(neon, (x, top + 125), (x, top + 125 + 230 * q), col(BLUE, 1.0), 6)
+        for j, (dx, dy) in enumerate([(250, 365), (270, 390), (290, 415)]):
+            if q > 0.5:
+                iline(neon, (cx - dx, top + dy), (cx + dx, top + dy), col(WHITE, 0.6), 3)
+    hud_ring(neon, cx, top + 200, 330, T * 0.4, BLUE, 0.35 * p)
+    big_stat(crisp, neon, "SINCE 2010", s, info["vo_start"] + 3.8, BLUE, y=1110, size=104,
+             label="SECRETARY TO THE NCOP · PARLIAMENT")
+
+
+def sc_medal(neon, crisp, s, T, info):
+    story_header(crisp, neon, s, 5, "YOUTH OLYMPICS", ["Team SA's first", "gold in Dakar"], GREEN)
+    p = ease_back(prog(s, 0.3, 0.6))
+    if p <= 0:
+        return
+    cx, cy, r = 540, 880, 125 * p
+    iline(neon, (cx - 120 * p, 610), (cx - 30 * p, cy - r), col(GREEN, 1.0), 10)
+    iline(neon, (cx + 120 * p, 610), (cx + 30 * p, cy - r), col(GOLD, 1.0), 10)
+    icircle(neon, (cx, cy), r, col(GOLD, 1.2), 7)
+    icircle(neon, (cx, cy), r * 0.78, col(GOLD, 0.6), 3)
+    star = []
+    for i in range(10):
+        ang = -math.pi / 2 + i * math.pi / 5
+        rr = r * (0.5 if i % 2 == 0 else 0.22)
+        star.append((cx + math.cos(ang) * rr, cy + math.sin(ang) * rr))
+    star = np.array(star, np.float32)
+    cv2.polylines(neon, [(star * 4).astype(np.int32)], True, col(WHITE, 1.0), 4, AA, shift=2)
+    for k in range(8):
+        ang = T * 1.2 + k * math.pi / 4
+        d = r + 60 + 10 * math.sin(T * 5 + k)
+        icircle(neon, (cx + math.cos(ang) * d, cy + math.sin(ang) * d), 5, col(GOLD, 0.6 + 0.6 * math.sin(T * 6 + k)), -1)
+    hud_ring(neon, cx, cy, 300, T, GREEN, 0.45 * p)
+    chip(crisp, "CALLUM DREYER · 16 · ROWING", 80, 1060, s, info["vo_start"] + 1.4, GOLD, size=28)
+    big_stat(crisp, neon, "GOLD", s, info["vo_start"] + 3.0, GOLD, y=1140, size=110,
+             label="COASTAL BEACH SPRINT · 2:15.65")
 
 
 def sc_outro(neon, crisp, s, T, info):

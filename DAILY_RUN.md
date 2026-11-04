@@ -1,6 +1,19 @@
 # SA Daily Brief: daily reel runbook
 
-Follow this every day to make one ~55-second Instagram Reel of today's South African news, plus a ready-to-paste caption. The look, logo, music, sound effects and voice stay the same every day. Only the stories change.
+Follow this to make a ~55-second Instagram Reel of South African news, plus a ready-to-paste caption. The look, logo, music, sound effects and voice stay the same every time. Only the stories change.
+
+There are **two editions a day**. The scheduled task tells you which one to make:
+
+| | Morning edition (runs ~06:20) | Afternoon edition (runs ~15:45) |
+|---|---|---|
+| Covers | News since the previous afternoon edition (yesterday ~16:00 to now), plus **what matters for today** | **What happened today** (from this morning to now): the day's wrap-up |
+| Must-checks | **Today's weather** (SAWS warnings, heat, storms, big-city forecast), fuel price changes, interest rates, the rand, load-shedding / water outages, major traffic or strike disruptions, and big scheduled events today (court cases, announcements, matches) | Fuel prices and interest rates (if announced today), plus the day's main national, political, economic, local and sport stories |
+| Intro line | "…your 60-second morning update for <Weekday>, <D> <Month>." | "…your 60-second news of the day for <Weekday>, <D> <Month>." |
+| Outro line | "That's your morning update. Follow for today's news at four." | "That's your 60 seconds. Follow for tomorrow's morning update." |
+| Caption first line | 🇿🇦 Your 60-second morning update for <Weekday>, <D> <Month>. | 🇿🇦 Today's SA news in 60 seconds, <Weekday>, <D> <Month>. |
+| `file_date` / log file | `<D><Mon><YYYY>_AM` · `episodes/<YYYY-MM-DD>-am.md` | `<D><Mon><YYYY>_PM` · `episodes/<YYYY-MM-DD>-pm.md` |
+
+The morning edition is the "start your day" brief: it should almost always include a weather story, and include a money story (fuel, rand, rates) whenever there's a real change or update. The afternoon edition is "this happened today, that happened today": it focuses on today's events, not things the morning edition already covered (only include those if there's a real new development).
 
 The run is unattended, so don't stop to ask questions. Make sensible calls and keep going.
 
@@ -16,11 +29,11 @@ cd ..
 ```
 Clone with `git clone --depth 1 https://github.com/Ceptivo/sadailynews` and work in that folder. **Do not commit changes to `render.py`, `audio.py`, `common.py`, `tts.py` or `assets/vo_*.npy`.** The committed versions are the reference template (the 3 Nov 2026 episode). Only `episodes/` gets committed (step 8).
 
-## 1. Find today's news (South Africa time, Africa/Johannesburg)
+## 1. Find the news (South Africa time, Africa/Johannesburg)
 
 Use WebSearch/WebFetch. Check several of these sources: News24, SABC News, IOL, TimesLIVE, Daily Maverick, EWN, Moneyweb, BusinessTech, Mail & Guardian, SuperSport, plus Reuters/AFP/Bloomberg for SA stories.
 
-Pick **5 stories** from the last 24 hours, roughly in this mix: the day's biggest national story, then politics/government, economy/business/money (rand, fuel, interest rates, load-shedding, jobs), a local or community story (service delivery, a city or province), and something lighter (sport, entertainment, a good-news story).
+Pick **5 stories** for the edition's time window (see the table above), roughly in this mix: the day's biggest national story, then politics/government, economy/business/money (rand, fuel, interest rates, load-shedding, jobs), a local or community story (service delivery, a city or province), and something lighter (sport, entertainment, a good-news story).
 
 **Always check these two, and include them whenever they change:**
 - **Petrol and diesel prices.** The Department of Mineral and Petroleum Resources announces changes, usually in the last days of the month, and they take effect on the first Wednesday of the month. When a change is announced or takes effect today or yesterday, include it as a story: increase or decrease, cents per litre for 95 petrol (inland) and diesel, and the date it applies from. Also include it when the mid-month data (Central Energy Fund) points clearly to a big increase or decrease, worded as "early data suggests…".
@@ -32,14 +45,14 @@ Rules:
 - Every fact must be confirmed by at least 2 reputable sources, or come from 1 primary source (government, IEC, SARB, Stats SA, police statement). Leave out anything you can't confirm.
 - Neutral, factual tone. No opinion, no speculation, no loaded words. Report what each side says.
 - Nothing graphic. Leave out victims' names in crime stories. Don't name minors.
-- Don't repeat a story that was already covered in `episodes/` (check the last 3 days) unless there's a real new development.
+- Don't repeat a story that was already covered in `episodes/` (check the last 3 days, both editions, including this morning's) unless there's a real new development.
 - Keep the source names for the outro line and the caption.
 
 ## 2. Write the script (target 50–58 s total)
 
-- `intro`: "This is SA Daily Brief — your 60-second news update for <Weekday>, <D> <Month>."
+- `intro`: the edition's intro line from the table, starting "This is SA Daily Brief — …".
 - 5 stories: each 15–28 spoken words, 1–2 short sentences, the most important fact first.
-- `outro`: "That's your 60 seconds. Follow for more tomorrow." (or a short, relevant follow line).
+- `outro`: the edition's outro line from the table (or a short, relevant follow line, e.g. "Follow for election results as they come in.").
 - Write numbers the way they're spoken in the phonemes ("seven hundred thousand"). Captions can use digits.
 
 ## 3. Voiceover (`tts.py`)
@@ -50,7 +63,7 @@ Run `python3 tts.py`. Check each segment's length; if the total from `python3 co
 
 ## 4. Episode settings (`common.py`)
 
-- `EPISODE`: `hud_date` like "WED 04 NOV 2026", `short_date` like "4 NOV 2026", `file_date` like "4Nov2026".
+- `EPISODE`: `hud_date` like "WED 04 NOV 2026", `short_date` like "4 NOV 2026", `file_date` like "4Nov2026_AM" or "4Nov2026_PM".
 - `ORDER`: `["intro", <5 story keys>, "outro"]` (short lowercase keys).
 - `CAPTIONS`: on-screen caption chunks for each key. They must match the spoken words, at most about 30 characters per chunk.
 - `SFX`: a sound preset for each story: `vote` (counting/ballot), `breaking` (big impact, good for politics/economy/conflict), `water` (water/utilities), `clap` (clapperboard: film/arts/announcements), `sport`, `alert` (warnings, crime, weather), `plain`.
@@ -63,7 +76,7 @@ Run `python3 tts.py`. Check each segment's length; if the total from `python3 co
 - One scene function per story, registered in `SCENES`. Every story scene starts with
   `story_header(crisp, neon, s, <n>, "<TAG>", ["<headline line 1>", "<line 2>"], <accent>)`
   (TAG is a short uppercase category, headline lines at most about 18 characters each), then draws one neon line-art icon/illustration in the card area (y about 600–1050) using the existing helpers (`poly_partial`, `iline`, `icircle`, `cv2` shapes on the `neon` layer with `col()`), plus optional `big_stat(...)` and `chip(...)` lines that appear in time with the voiceover (`info["vo_start"] + seconds`).
-- Reuse and adapt the existing scenes wherever they fit: `sc_vote` (ballot box: elections/voting), `sc_agoa` (trade/arrows: economy, international), `sc_water` (water drop: utilities/municipal), `sc_film` (clapperboard: arts/entertainment), `sc_rugby` (ball/players: sport). For other topics, write a new scene in the same style (for example: rand/coin chart for money, lightning bolt for electricity, fuel pump, police light, house, school, hospital cross, cloud/rain for weather, gavel for courts, globe for world news). Keep it simple, clean and centred, the same neon-outline look.
+- Reuse and adapt the existing scenes wherever they fit: `sc_vote` (ballot box: elections/voting), `sc_agoa` (trade/arrows: economy, international), `sc_water` (water drop: utilities/municipal), `sc_film` (clapperboard: arts/entertainment), `sc_rugby` (ball/players: sport), `sc_weather` (cloud, lightning, sun: weather warnings/heat), `sc_fuel` (fuel pump with down arrow: fuel prices; flip the arrow to red and pointing up for an increase), `sc_parliament` (Parliament building: Parliament/government), `sc_medal` (gold medal: sporting wins/awards). Change their header text, chips and stats to match the story. For other topics, write a new scene in the same style (for example: rand/coin chart for money, lightning bolt for electricity, fuel pump, police light, house, school, hospital cross, cloud/rain for weather, gavel for courts, globe for world news). Keep it simple, clean and centred, the same neon-outline look.
 - Leave the intro, outro, HUD, logo, ticker style, captions, background and transitions alone. Don't change `Y_SHIFT` in `common.py`: it moves everything down so the top bar clears Instagram's "Reels / Friends" header and the ticker sits just above the username. Keep scene content between y≈230 and y≈1460 (before the shift) so nothing hits those areas.
 
 ## 6. Check, then render
@@ -76,13 +89,13 @@ Run `python3 tts.py`. Check each segment's length; if the total from `python3 co
 
 Same format as this example:
 ```
-🇿🇦 Your 60-second SA news update for <Weekday>, <D> <Month>.
+<edition's caption first line from the table>
 
 <emoji> <story 1 in 1–2 sentences>
 <emoji> <story 2>
 … (all 5)
 
-Follow @sadailybrief for tomorrow's update 🔔
+Follow @sadailybrief for <the next edition: "today's news at 4pm" or "tomorrow's morning update"> 🔔
 
 Sources: <outlets>
 
@@ -93,8 +106,8 @@ Every caption must include the follow line with the real handle **@sadailybrief*
 
 ## 8. Deliver
 
-1. Copy the MP4 (`SA_Daily_Brief_<date>.mp4`) and `caption.txt` to `/mnt/user-data/outputs/`, then send both with SendUserFile.
+1. Copy the MP4 (`SA_Daily_Brief_<file_date>.mp4`) and `caption.txt` to `/mnt/user-data/outputs/`, then send both with SendUserFile.
 2. Send the caption text with SendUserMessage too, so it can be copied straight from the message, along with a one-line list of the 5 stories.
-3. Log the episode: write `episodes/<YYYY-MM-DD>.md` (the stories, sources with URLs, the script and the caption). Commit only that file and push it to the default branch, with message "Episode <YYYY-MM-DD>". If the push fails, say so in the final message, but still deliver the video.
+3. Log the episode: write `episodes/<YYYY-MM-DD>-am.md` or `-pm.md` (the stories, sources with URLs, the script and the caption). Commit only that file and push it to the default branch, with message "Episode <YYYY-MM-DD> AM/PM" (pull first if the push is rejected). If the push fails, say so in the final message, but still deliver the video.
 
 If something fails (news search, TTS, render), fix it and carry on. If a video truly can't be made, send a message explaining what went wrong, and still send the caption and story list.
