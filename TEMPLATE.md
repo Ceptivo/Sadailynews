@@ -8,4 +8,6 @@ See DAILY_RUN.md for the full daily process. Per episode, change:
 3. `render.py`: story scenes (`sc_*`), `TICKER`, `ACCENT`, sources line in `sc_outro`
 4. `bash run.sh` gives `SA_Daily_Brief_<date>.mp4`
 
+Illustrations: `icons.py` holds the detailed, shaded icon library (preview with `python3 icon_gallery.py` → `build/icon_gallery.jpg`); scenes place them with `place_icon()`.
+
 Logo assets: `assets/logo_source.png` (original), `logo_map.png` + `logo_wordmark.png` (extracted, transparent).

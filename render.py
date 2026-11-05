@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from common import DIR, OUT, FPS, ORDER, EPISODE, Y_SHIFT, caption_times, timeline
+import icons as IC
 
 W, H = 1080, 1920
 AA = cv2.LINE_AA
@@ -418,43 +419,52 @@ def sc_intro(neon, crisp, s, T, info):
     blit(crisp, sub, 540 - sub.shape[1] / 2, 512, q, xw=sub.shape[1] * ease_out(q))
 
 
-def ballot_box(neon, crisp, s, T):
-    cx, cy = 540, 860
-    p = ease_back(prog(s, 0.3, 0.5))
-    bw, bh = int(400 * p), int(300 * p)
-    if p <= 0:
+# ---------- detailed icons (icons.py) ----------
+def place_icon(neon, crisp, ic, cx, cy, scale=1.0, a=1.0, angle=0.0, glow=1.0):
+    """Draw an icons.Icon centred at (cx, cy): solid body on the crisp layer, rim light into the neon (glow) layer."""
+    if scale <= 0.01 or a <= 0.003:
         return
-    # back top face (isometric hint)
-    top = np.array([[cx - bw / 2, cy - bh / 2], [cx - bw / 2 + 60 * p, cy - bh / 2 - 60 * p],
-                    [cx + bw / 2 + 60 * p, cy - bh / 2 - 60 * p], [cx + bw / 2, cy - bh / 2]], np.float32)
-    side = np.array([[cx + bw / 2, cy - bh / 2], [cx + bw / 2 + 60 * p, cy - bh / 2 - 60 * p],
-                     [cx + bw / 2 + 60 * p, cy + bh / 2 - 60 * p], [cx + bw / 2, cy + bh / 2]], np.float32)
-    cv2.fillPoly(neon, [(side * 4).astype(np.int32)], col(GOLD, 0.12), AA, shift=2)
-    cv2.polylines(neon, [(top * 4).astype(np.int32)], True, col(GOLD, 0.9), 4, AA, shift=2)
-    cv2.polylines(neon, [(side * 4).astype(np.int32)], True, col(GOLD, 0.9), 4, AA, shift=2)
-    cv2.rectangle(neon, (cx - bw // 2, cy - bh // 2), (cx + bw // 2, cy + bh // 2), col(GOLD, 1.0), 5, AA)
-    # slot
-    sl = np.array([[cx - 90 * p, cy - bh / 2 - 22 * p], [cx - 60 * p, cy - bh / 2 - 44 * p],
-                   [cx + 120 * p, cy - bh / 2 - 44 * p], [cx + 90 * p, cy - bh / 2 - 22 * p]], np.float32)
-    cv2.polylines(neon, [(sl * 4).astype(np.int32)], True, col(WHITE, 0.9), 3, AA, shift=2)
-    # front label
-    lab = text_sprite("VOTE 2026", F_BLACK, int(58 * p) + 1, GOLD)
-    blit(neon, lab, cx - lab.shape[1] / 2, cy - 10, 0.9)
-    # ballots dropping
-    for k, t0 in enumerate([1.0, 2.2, 3.4]):
-        q = prog(s, t0, 0.9)
-        if 0 < q < 1:
-            y = 560 + (cy - bh / 2 - 40 - 560) * (q ** 2)
-            vis = 1 if q < 0.92 else (1 - q) / 0.08
-            cv2.rectangle(neon, (cx - 50, int(y - 70)), (cx + 50, int(y + 30)), col(WHITE, 0.9 * vis), 3, AA)
-            iline(neon, (cx - 22, y - 40), (cx + 22, y), col(GREEN, 1.3 * vis), 5)
-            iline(neon, (cx + 22, y - 40), (cx - 22, y), col(GREEN, 1.3 * vis), 5)
-    hud_ring(neon, cx, cy - 30, 300, T, GOLD, 0.6 * p)
+    body, g = ic.body, ic.glow
+    if angle:
+        h, w = body.shape[:2]
+        d = int(math.hypot(w, h)) + 2
+        M = cv2.getRotationMatrix2D((w / 2, h / 2), -angle, 1.0)
+        M[0, 2] += (d - w) / 2
+        M[1, 2] += (d - h) / 2
+        body = cv2.warpAffine(body, M, (d, d), flags=cv2.INTER_LINEAR)
+        g = cv2.warpAffine(g, M, (d, d), flags=cv2.INTER_LINEAR)
+    blit_scaled(crisp, body, cx, cy, scale, a)
+    h, w = g.shape[:2]
+    nw, nh = max(1, int(w * scale)), max(1, int(h * scale))
+    gs = cv2.resize(g, (nw, nh), interpolation=cv2.INTER_AREA)
+    x0, y0 = int(round(cx - nw / 2)), int(round(cy - nh / 2))
+    X0, Y0, X1, Y1 = max(x0, 0), max(y0, 0), min(x0 + nw, W), min(y0 + nh, H)
+    if X1 <= X0 or Y1 <= Y0:
+        return
+    sub = gs[Y0 - y0:Y1 - y0, X0 - x0:X1 - x0].astype(np.float32) * (a * glow)
+    neon[Y0:Y1, X0:X1] = np.maximum(neon[Y0:Y1, X0:X1], np.clip(sub, 0, 255).astype(np.uint8))
+
+
+def pop(s, t0=0.3, d=0.55):
+    """Pop-in scale (0 -> overshoot -> 1) for icons."""
+    return ease_back(prog(s, t0, d))
+
+
+ICON_Y = 815  # centre of the card area (card spans y 560-1062)
+
+
+def ripples(neon, cx, cy, s, color, n=3, rx=260, ry=50):
+    for k in range(n):
+        rr = ((s * 0.6 + k / n) % 1.0)
+        cv2.ellipse(neon, (int(cx), int(cy)), (int(30 + rr * rx), int(8 + rr * ry)), 0, 0, 360,
+                    col(color, (1 - rr) * 0.8), 3, AA)
 
 
 def sc_vote(neon, crisp, s, T, info):
     story_header(crisp, neon, s, 1, "LOCAL ELECTIONS 2026", ["Special voting", "wraps up today"], GOLD)
-    ballot_box(neon, crisp, s, T)
+    p = pop(s)
+    hud_ring(neon, 540, ICON_Y, 300, T, GOLD, 0.45 * p)
+    place_icon(neon, crisp, IC.ballot_box(GOLD, "VOTE"), 540, ICON_Y + 4 * math.sin(T * 2), 0.85 * p, min(1, p * 2))
     chip(crisp, "ELECTION DAY  ·  WED 4 NOV", 80, 1060, s, 2.6, GOLD)
     t0 = info["vo_start"] + 4.4
     q = prog(s, t0, 1.6)
@@ -463,16 +473,14 @@ def sc_vote(neon, crisp, s, T, info):
         big_stat(crisp, neon, f"{n:,}+", s, t0, GOLD, y=1140, size=118, label="VOTES CAST ON SPECIAL VOTING DAY 1 · IEC")
 
 
+
 def sc_agoa(neon, crisp, s, T, info):
     story_header(crisp, neon, s, 2, "TRADE", ["US moves to drop", "SA from AGOA"], MAG)
     a, b = np.array([250., 860.]), np.array([830., 860.])
     pa = ease_back(prog(s, 0.4, 0.5))
     for c, pt, lab, cc in [(GREEN, a, "ZA", GOLD), (BLUE, b, "US", CYAN)]:
         if pa > 0:
-            icircle(neon, pt, 92 * pa, col(c, 1.0), 5)
-            icircle(neon, pt, 112 * pa, col(cc, 0.4), 2)
-            ls = text_sprite(lab, F_BLACK, 70, WHITE)
-            blit_scaled(crisp, ls, pt[0], pt[1], pa, min(1, pa))
+            place_icon(neon, crisp, IC.sphere(c, lab), pt[0], pt[1], 0.85 * pa, min(1, pa * 2))
             for i in range(12):
                 ang = math.radians(i * 30 + T * 50 * (1 if lab == "ZA" else -1))
                 iline(neon, pt + np.array([math.cos(ang), math.sin(ang)]) * 122 * pa,
@@ -526,143 +534,58 @@ def drop_pts(cx, cy, r):
 
 def sc_water(neon, crisp, s, T, info):
     story_header(crisp, neon, s, 3, "TSHWANE", ["Tap water still", "unsafe to drink"], CYAN)
-    cx, cy = 540, 820
-    p = ease_back(prog(s, 0.3, 0.6))
-    r = 210 * p
-    if p > 0:
-        pts = drop_pts(cx, cy, r)
-        # murky fill with wave, clipped to drop
-        mask = np.zeros((H, W), np.uint8)
-        cv2.fillPoly(mask, [(pts * 4).astype(np.int32)], 255, AA, shift=2)
-        lvl = cy + 40 - 120 * ease_out(prog(s, 0.6, 1.5))
-        xs = np.arange(W)
-        wave = lvl + 10 * np.sin(xs / 38 + T * 4)
-        yy = np.arange(H)[:, None]
-        fill = (yy > wave[None, :]) & (mask > 0)
-        c = np.array(col((70, 85, 40), 0.42), np.uint8)
-        neon[fill] = np.maximum(neon[fill], c)
-        cv2.polylines(neon, [(pts * 4).astype(np.int32)], True, col(CYAN, 1.0), 6, AA, shift=2)
-        # ripples
-        for k in range(3):
-            rr = ((s * 0.7 + k / 3) % 1.0)
-            cv2.ellipse(neon, (cx, cy + int(r * 0.6) + 70), (int(60 + rr * 260), int(14 + rr * 50)),
-                        0, 0, 360, col(CYAN, (1 - rr) * 0.8), 3, AA)
-        hud_ring(neon, cx, cy - 10, 320, T, CYAN, 0.5 * p)
-    # warning triangle
+    p = pop(s)
+    place_icon(neon, crisp, IC.tap_drop(), 500, ICON_Y, 0.78 * p, min(1, p * 2))
     q = ease_back(prog(s, info["vo_start"] + 2.6, 0.4))
     if q > 0:
-        bx, by, R = 740, 930, 95 * q
+        bx, by, R = 800, 930, 80 * q
         pulse = 0.8 + 0.4 * (math.sin(T * 10) > 0)
         tri = np.array([[bx, by - R], [bx + R * 1.1, by + R * 0.8], [bx - R * 1.1, by + R * 0.8]], np.float32)
         cv2.fillPoly(neon, [(tri * 4).astype(np.int32)], col((60, 0, 8), 1), AA, shift=2)
         cv2.polylines(neon, [(tri * 4).astype(np.int32)], True, col(RED, 1.2 * pulse), 7, AA, shift=2)
-        ex = text_sprite("!", F_BLACK, int(100 * q) + 1, WHITE)
+        ex = text_sprite("!", F_BLACK, int(90 * q) + 1, WHITE)
         blit(crisp, ex, bx - ex.shape[1] / 2 + 4, by - ex.shape[0] / 2 + 10)
     t0 = info["vo_start"] + 2.9
     if s > t0:
         flash = 1.0 if (int((s - t0) * 4) % 2 == 0) else 0.75
-        w = chip(crisp, "DO NOT DRINK  ·  BRONKHORSTSPRUIT", 80, 1100, s, t0, RED, size=34,
-                 fill=(int(70 * flash), 0, 12, 235))
+        chip(crisp, "DO NOT DRINK  ·  BRONKHORSTSPRUIT", 80, 1100, s, t0, RED, size=34, fill=(int(70 * flash), 0, 12, 235))
     chip(crisp, "CITY OF TSHWANE ADVISORY", 80, 1195, s, t0 + 0.4, CYAN, size=26)
 
 
 def sc_film(neon, crisp, s, T, info):
     story_header(crisp, neon, s, 4, "FILM & TV", ["Incentive talks", "collapse again"], RED)
-    cx, cy = 540, 900
-    p = ease_back(prog(s, 0.25, 0.5))
-    if p <= 0:
-        return
-    bw, bh = int(460 * p), int(270 * p)
-    x0, y0 = cx - bw // 2, cy - bh // 2
-    cv2.rectangle(neon, (x0, y0), (x0 + bw, y0 + bh), col(WHITE, 0.9), 5, AA)
+    p = pop(s, 0.25, 0.5)
     snaps = [info["vo_start"] + 0.2, info["vo_start"] + 1.4, info["vo_start"] + 2.9]
-    # clapper angle: open between snaps, shut at each snap
-    ang = 28
-    done = 0
+    ang, done = 28, 0
     for st in snaps:
-        if s >= st:
-            done += 1
+        done += s >= st
         d = s - st
         if -0.35 < d < 0:
-            ang = 28 * (-d / 0.35) ** 0.5 if d > -0.35 else 28
+            ang = 28 * (-d / 0.35) ** 0.5
         elif 0 <= d < 0.4:
             ang = 0 if d < 0.12 else 28 * ease_out((d - 0.12) / 0.28)
     if s > snaps[-1]:
         ang = 0
-    # stick (top bar) hinged at top-left of body
-    hx, hy = x0, y0
-    th = math.radians(-ang)
-    L, Hh = bw, int(64 * p)
-
-    def rot(px, py):
-        return (hx + px * math.cos(th) - py * math.sin(th), hy + px * math.sin(th) + py * math.cos(th))
-    bar = np.array([rot(0, -Hh), rot(L, -Hh), rot(L, 0), rot(0, 0)], np.float32)
-    cv2.polylines(neon, [(bar * 4).astype(np.int32)], True, col(WHITE, 1.0), 5, AA, shift=2)
-    for k in range(6):
-        a1, a2 = rot(k * L / 6 + 20, -Hh), rot(k * L / 6 + 20 + L / 12, 0)
-        iline(neon, a1, a2, col(RED, 1.1), 10)
-    for k in range(6):
-        iline(neon, (x0 + k * bw / 6 + 20, y0 + 6), (x0 + k * bw / 6 + 20 + bw / 12, y0 + 46 * p), col(RED, 1.1), 10)
-    iline(neon, (x0, y0 + 52 * p), (x0 + bw, y0 + 52 * p), col(WHITE, 0.8), 3)
-    take = text_sprite(f"TALKS · TAKE {max(1, done)}", F_BLACK, int(44 * p) + 1, WHITE)
-    blit(crisp, take, cx - take.shape[1] / 2, cy + 10 * p)
-    sub = text_sprite("dtic  ×  SA FILM & TV", F_MONO, int(26 * p) + 1, (200, 200, 220))
-    blit(crisp, sub, cx - sub.shape[1] / 2, cy + 80 * p)
-    # snap flash + crack
+    cx, cy = 540, ICON_Y + 10
+    place_icon(neon, crisp, IC.clapperboard(int(round(ang)), f"TAKE {max(1, done)}", RED), cx, cy, 1.0 * p, min(1, p * 2))
     for st in snaps:
         d = s - st
         if 0 <= d < 0.25:
-            icircle(neon, (x0, y0), 40 + d * 500, col(RED, (1 - d / 0.25) * 1.3), 5)
-    if done >= 3:
-        q = prog(s, snaps[-1], 0.3)
-        crack = np.array([[cx + 40, y0 + 55], [cx + 10, cy], [cx + 50, cy + 40], [cx + 15, y0 + bh]], np.float32)
-        poly_partial(neon, crack, q, col(RED, 1.5), 6)
-    hud_ring(neon, cx, cy - 20, 330, T, RED, 0.45)
+            icircle(neon, (cx - 180, cy - 90), 40 + d * 500, col(RED, (1 - d / 0.25) * 1.3), 5)
+    hud_ring(neon, cx, cy, 330, T, RED, 0.35)
     big_stat(crisp, neon, "3RD", s, snaps[-1], RED, y=1150, size=118, label="BREAKDOWN IN INCENTIVE TALKS · COALITION")
 
 
 def sc_rugby(neon, crisp, s, T, info):
     story_header(crisp, neon, s, 5, "SPRINGBOKS", ["Rassie names six", "uncapped Boks"], GREEN)
-    # giant faint 6
-    cx, cy = 580, 820
-    p = ease_back(prog(s, 0.3, 0.5))
-    if p > 0:
-        tilt = -25 + 8 * math.sin(T * 2.2)
-        a_, b_ = int(230 * p), int(140 * p)
-        cv2.ellipse(neon, (cx, cy), (a_, b_), tilt, 0, 360, col(GOLD, 1.0), 6, AA)
-        cv2.ellipse(neon, (cx, cy), (a_, int(b_ * 0.55)), tilt, 0, 360, col(GOLD, 0.35), 2, AA)
-        spin = T * 3.0
-        tr = math.radians(tilt)
-        for k in range(4):
-            phs = spin + k * math.pi / 2
-            vis = math.cos(phs)
-            if vis <= 0:
-                continue
-            off = math.sin(phs) * b_ * 0.9
-            for u in np.linspace(-0.75, 0.75, 2):
-                pass
-            pts = []
-            for u in np.linspace(-0.9, 0.9, 30):
-                x = u * a_
-                y = off * math.sqrt(max(0, 1 - u * u))
-                pts.append((cx + x * math.cos(tr) - y * math.sin(tr), cy + x * math.sin(tr) + y * math.cos(tr)))
-            cv2.polylines(neon, [(np.array(pts) * 4).astype(np.int32)], False, col(GOLD, 0.25 + 0.6 * vis), 3, AA, shift=2)
-        # laces
-        for k in range(-3, 4):
-            x, y = k * 26, -b_ * 0.15
-            for dy in (-14, 14):
-                pa = (cx + x * math.cos(tr) - y * math.sin(tr), cy + x * math.sin(tr) + y * math.cos(tr))
-                pb = (cx + x * math.cos(tr) - (y + dy) * math.sin(tr), cy + x * math.sin(tr) + (y + dy) * math.cos(tr))
-            iline(neon, pa, pb, col(WHITE, 1.0), 3)
-        iline(neon, (cx - 82 * math.cos(tr) + 20 * math.sin(tr), cy - 82 * math.sin(tr) - 20 * math.cos(tr)),
-              (cx + 82 * math.cos(tr) + 20 * math.sin(tr), cy + 82 * math.sin(tr) - 20 * math.cos(tr)), col(WHITE, 0.9), 3)
-        for k in range(5):
-            yy = cy - 120 + k * 60
-            ln = 120 + 60 * math.sin(T * 8 + k)
-            iline(neon, (max(110, cx - 290 - ln), yy), (cx - 270, yy), col(GREEN, 0.7), 3)
-        hud_ring(neon, cx, cy, 300, T, GREEN, 0.5 * p)
-    big_stat(crisp, neon, "6 UNCAPPED", s, info["vo_start"] + 2.3, GREEN, y=1110, size=104,
-             label="37-MAN NATIONS CHAMPIONSHIP SQUAD")
+    p = pop(s)
+    cx, cy = 580, ICON_Y - 10
+    for k in range(5):
+        yy = cy - 100 + k * 50
+        ln = 120 + 60 * math.sin(T * 8 + k)
+        iline(neon, (max(110, cx - 330 - ln), yy), (cx - 300, yy), col(GREEN, 0.7 * p), 3)
+    place_icon(neon, crisp, IC.rugby_ball(GREEN, GOLD), cx, cy, 1.2 * p, min(1, p * 2), angle=-25 + 8 * math.sin(T * 2.2))
+    big_stat(crisp, neon, "6 UNCAPPED", s, info["vo_start"] + 2.3, GREEN, y=1110, size=104, label="37-MAN NATIONS CHAMPIONSHIP SQUAD")
     t0 = info["vo_start"] + 4.6
     x = 80
     for i, c in enumerate(["ITALY", "FRANCE", "IRELAND"]):
@@ -670,130 +593,206 @@ def sc_rugby(neon, crisp, s, T, info):
         x += (w or 170) + 14
 
 
-# ---- reusable scene library (from earlier episodes; adapt the text, register in SCENES) ----
+# ---- reusable scene library (adapt the text, register in SCENES). Every icon lives in icons.py ----
 def sc_weather(neon, crisp, s, T, info):
     story_header(crisp, neon, s, 2, "WEATHER", ["Storms and heat", "on voting day"], CYAN)
-    p = ease_back(prog(s, 0.3, 0.6))
-    if p <= 0:
-        return
-    # cloud outline from overlapping circles
-    cx, cy = 430, 760
-    m = np.zeros((H, W), np.uint8)
-    for dx, dy, r in [(-120, 30, 80), (-30, -20, 110), (90, 10, 90), (0, 60, 90), (150, 55, 60), (-170, 70, 55)]:
-        cv2.circle(m, (int(cx + dx * p), int(cy + dy * p)), max(1, int(r * p)), 255, -1)
-    cv2.rectangle(m, (0, int(cy + 115 * p)), (W, H), 0, -1)
-    cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    for c in cnts:
-        cv2.polylines(neon, [c], True, col(CYAN, 1.0), 5, AA)
-    # rain
-    for k in range(9):
-        x = cx - 170 + k * 42
-        u = ((s * 1.4 + k * 0.37) % 1.0)
-        y = cy + 130 + u * 170
-        iline(neon, (x, y), (x - 10, y + 32), col(CYAN, 0.6 * (1 - u) * p), 3)
-    # lightning bolt, flashing on a beat
-    t0 = 0.8
-    if s > t0:
-        flash = 1.6 if (int((s - t0) * 3) % 3 == 0) else 0.7
-        bolt = np.array([[cx + 10, cy + 70], [cx - 40, cy + 190], [cx + 5, cy + 190], [cx - 35, cy + 300],
-                         [cx + 70, cy + 160], [cx + 25, cy + 160], [cx + 60, cy + 70]], np.float32)
-        cv2.fillPoly(neon, [(bolt * 4).astype(np.int32)], col(GOLD, 0.25 * flash), AA, shift=2)
-        cv2.polylines(neon, [(bolt * 4).astype(np.int32)], True, col(GOLD, flash), 5, AA, shift=2)
-    # sun for the heat
-    q = ease_back(prog(s, info["vo_start"] + 4.6, 0.5))
-    if q > 0:
-        sx, sy = 800, 720
-        icircle(neon, (sx, sy), 70 * q, col(RED, 1.1), 6)
-        icircle(neon, (sx, sy), 50 * q, col(GOLD, 0.5), 3)
-        for i in range(12):
-            ang = math.radians(i * 30 + T * 30)
-            r1, r2 = 92 * q, (122 + 10 * math.sin(T * 6 + i)) * q
-            iline(neon, (sx + math.cos(ang) * r1, sy + math.sin(ang) * r1),
-                  (sx + math.cos(ang) * r2, sy + math.sin(ang) * r2), col(GOLD, 1.0), 5)
+    p = pop(s)
+    flash = 1.6 if (s > 0.8 and int((s - 0.8) * 3) % 3 == 0) else 0.8
+    q = pop(s, info["vo_start"] + 4.6, 0.5)
+    place_icon(neon, crisp, IC.sun(), 820, 700, 0.62 * q, min(1, q * 2), angle=T * 12)
+    place_icon(neon, crisp, IC.storm_cloud(), 450, ICON_Y, 0.76 * p, min(1, p * 2), glow=flash)
     chip(crisp, "LEVEL 4 STORMS · MPUMALANGA & NW KZN", 80, 1100, s, info["vo_start"] + 1.2, GOLD, size=28)
     chip(crisp, "EXTREME HEAT · WESTERN & NORTHERN CAPE", 80, 1195, s, info["vo_start"] + 5.0, RED, size=28)
 
 
 def sc_fuel(neon, crisp, s, T, info):
+    # price increase: IC.fuel_pump(MAG, "+50c") and IC.arrow3d(up=True); decrease: arrow3d(up=False)
     story_header(crisp, neon, s, 3, "FUEL PRICES", ["Diesel down,", "petrol barely"], MAG)
-    p = ease_back(prog(s, 0.3, 0.5))
-    if p <= 0:
-        return
-    # pump body, screen, nozzle and hose
-    x0, y0, w, h = 300, 640, int(240 * p), int(380 * p)
-    cv2.rectangle(neon, (x0, y0), (x0 + w, y0 + h), col(MAG, 1.0), 6, AA)
-    cv2.rectangle(neon, (x0 + int(30 * p), y0 + int(36 * p)), (x0 + w - int(30 * p), y0 + int(130 * p)), col(WHITE, 0.8), 3, AA)
-    iline(neon, (x0 - 30, y0 + h), (x0 + w + 30, y0 + h), col(MAG, 0.8), 5)
-    iline(neon, (x0 + 40 * p, y0 + 180 * p), (x0 + w - 40 * p, y0 + 180 * p), col(WHITE, 0.4), 3)
-    iline(neon, (x0 + 40 * p, y0 + 220 * p), (x0 + w - 40 * p, y0 + 220 * p), col(WHITE, 0.4), 3)
-    tt = np.linspace(0, 1, 40)[:, None]
-    a_, c_, b_ = np.array([x0 + w, y0 + 60 * p]), np.array([x0 + w + 140 * p, y0 + 60 * p]), np.array([x0 + w + 80 * p, y0 + 260 * p])
-    hose = ((1 - tt) ** 2) * a_ + 2 * (1 - tt) * tt * c_ + (tt ** 2) * b_
-    poly_partial(neon, hose.astype(np.float32), 1, col(MAG, 0.9), 5)
-    noz = np.array([b_, b_ + [-30 * p, 20 * p], b_ + [-30 * p, 70 * p], b_ + [10 * p, 70 * p], b_ + [10 * p, 10 * p]], np.float32)
-    cv2.polylines(neon, [(noz * 4).astype(np.int32)], False, col(MAG, 1.0), 5, AA, shift=2)
-    if p > 0.6:
-        sc = text_sprite("-1c", F_BLACK, 52, WHITE)
-        blit(crisp, sc, x0 + w / 2 - sc.shape[1] / 2, y0 + 50)
-    # bobbing down arrow
-    q = ease_out(prog(s, info["vo_start"] + 1.4, 0.5))
-    if q > 0:
-        ax, ay = 790, 720 + 12 * math.sin(T * 5)
-        L = 190 * q
-        iline(neon, (ax, ay), (ax, ay + L), col(GREEN, 1.2), 12)
-        iline(neon, (ax - 60, ay + L - 60), (ax, ay + L), col(GREEN, 1.2), 12)
-        iline(neon, (ax + 60, ay + L - 60), (ax, ay + L), col(GREEN, 1.2), 12)
+    p = pop(s)
+    place_icon(neon, crisp, IC.fuel_pump(MAG, "-1c"), 420, ICON_Y, 0.76 * p, min(1, p * 2))
+    q = pop(s, info["vo_start"] + 1.4, 0.5)
+    place_icon(neon, crisp, IC.arrow3d(up=False), 800, ICON_Y + 10 * math.sin(T * 5), 0.85 * q, min(1, q * 2))
     chip(crisp, "DIESEL: DOWN OVER R1 A LITRE", 80, 1100, s, info["vo_start"] + 1.6, GREEN, size=30)
     chip(crisp, "PETROL: DOWN 1c   ·   PARAFFIN: UP", 80, 1195, s, info["vo_start"] + 4.6, RED, size=28)
 
 
 def sc_parliament(neon, crisp, s, T, info):
     story_header(crisp, neon, s, 4, "PARLIAMENT", ["NCOP Secretary", "dies suddenly"], BLUE)
-    p = ease_out(prog(s, 0.3, 1.2))
-    if p <= 0:
-        return
-    cx, top = 540, 640
-    ped = np.array([[cx - 230, top + 90], [cx, top], [cx + 230, top + 90]], np.float32)
-    poly_partial(neon, ped, p, col(WHITE, 0.9), 5)
-    if p > 0.3:
-        q = (p - 0.3) / 0.7
-        cv2.rectangle(neon, (cx - 240, top + 90), (cx + 240, top + 125), col(BLUE, 0.9 * q + 0.1), 4, AA)
-        for i in range(6):
-            x = cx - 200 + i * 80
-            iline(neon, (x, top + 125), (x, top + 125 + 230 * q), col(BLUE, 1.0), 6)
-        for j, (dx, dy) in enumerate([(250, 365), (270, 390), (290, 415)]):
-            if q > 0.5:
-                iline(neon, (cx - dx, top + dy), (cx + dx, top + dy), col(WHITE, 0.6), 3)
-    hud_ring(neon, cx, top + 200, 330, T * 0.4, BLUE, 0.35 * p)
-    big_stat(crisp, neon, "SINCE 2010", s, info["vo_start"] + 3.8, BLUE, y=1110, size=104,
-             label="SECRETARY TO THE NCOP · PARLIAMENT")
+    p = ease_out(prog(s, 0.3, 0.9))
+    hud_ring(neon, 540, ICON_Y, 330, T * 0.4, BLUE, 0.3 * p)
+    place_icon(neon, crisp, IC.parliament(BLUE), 540, ICON_Y + (1 - p) * 40, 0.8, p)
+    big_stat(crisp, neon, "SINCE 2010", s, info["vo_start"] + 3.8, BLUE, y=1110, size=104, label="SECRETARY TO THE NCOP · PARLIAMENT")
 
 
 def sc_medal(neon, crisp, s, T, info):
     story_header(crisp, neon, s, 5, "YOUTH OLYMPICS", ["Team SA's first", "gold in Dakar"], GREEN)
-    p = ease_back(prog(s, 0.3, 0.6))
-    if p <= 0:
-        return
-    cx, cy, r = 540, 880, 125 * p
-    iline(neon, (cx - 120 * p, 610), (cx - 30 * p, cy - r), col(GREEN, 1.0), 10)
-    iline(neon, (cx + 120 * p, 610), (cx + 30 * p, cy - r), col(GOLD, 1.0), 10)
-    icircle(neon, (cx, cy), r, col(GOLD, 1.2), 7)
-    icircle(neon, (cx, cy), r * 0.78, col(GOLD, 0.6), 3)
-    star = []
-    for i in range(10):
-        ang = -math.pi / 2 + i * math.pi / 5
-        rr = r * (0.5 if i % 2 == 0 else 0.22)
-        star.append((cx + math.cos(ang) * rr, cy + math.sin(ang) * rr))
-    star = np.array(star, np.float32)
-    cv2.polylines(neon, [(star * 4).astype(np.int32)], True, col(WHITE, 1.0), 4, AA, shift=2)
-    for k in range(8):
-        ang = T * 1.2 + k * math.pi / 4
-        d = r + 60 + 10 * math.sin(T * 5 + k)
-        icircle(neon, (cx + math.cos(ang) * d, cy + math.sin(ang) * d), 5, col(GOLD, 0.6 + 0.6 * math.sin(T * 6 + k)), -1)
-    hud_ring(neon, cx, cy, 300, T, GREEN, 0.45 * p)
+    p = pop(s)
+    hud_ring(neon, 540, ICON_Y, 300, T, GREEN, 0.4 * p)
+    place_icon(neon, crisp, IC.medal(GREEN, GOLD, "gold"), 540, ICON_Y - 10, 0.7 * p, min(1, p * 2), angle=4 * math.sin(T * 2))
     chip(crisp, "CALLUM DREYER · 16 · ROWING", 80, 1060, s, info["vo_start"] + 1.4, GOLD, size=28)
-    big_stat(crisp, neon, "GOLD", s, info["vo_start"] + 3.0, GOLD, y=1140, size=110,
-             label="COASTAL BEACH SPRINT · 2:15.65")
+    big_stat(crisp, neon, "GOLD", s, info["vo_start"] + 3.0, GOLD, y=1140, size=110, label="COASTAL BEACH SPRINT · 2:15.65")
+
+
+def sc_results(neon, crisp, s, T, info):
+    """Election results / polls: growing 3D bars with % labels."""
+    story_header(crisp, neon, s, 1, "ELECTION RESULTS", ["ANC ahead,", "DA close behind"], GOLD)
+    bars = [("ANC", 32, GREEN), ("DA", 28, BLUE), ("MK", 6, GOLD)]
+    q = ease_out(prog(s, 0.5, 1.4))
+    k, cx, cy = 0.82, 540, ICON_Y + 10
+    hs = tuple(int(v * 11 * q / 4) * 4 for _, v, _ in bars)
+    ic = IC.bars3d(hs, tuple(c for _, _, c in bars))
+    w = ic.size[0]
+    place_icon(neon, crisp, ic, cx, cy, k)
+    for i, ((nm, v, c), h) in enumerate(zip(bars, hs)):
+        bx = cx + (60 + i * 200 + 65 - w / 2) * k
+        top = cy + (470 - h - 260) * k
+        lab = text_sprite(nm, F_BLACK, 40, WHITE)
+        blit(crisp, lab, bx - lab.shape[1] / 2, cy + (480 - 260) * k, min(1, q * 2))
+        pct = text_sprite(f"~{int(round(v * q))}%", F_BLACK, 44, WHITE)
+        blit(crisp, pct, bx - pct.shape[1] / 2, top - 70, min(1, q * 2))
+    chip(crisp, "~1/3 OF VOTING DISTRICTS COUNTED", 80, 1110, s, info["vo_start"] + 0.6, GOLD, size=28)
+    chip(crisp, "RESULTS DUE SUNDAY 8 NOV · IEC", 80, 1205, s, info["vo_start"] + 6.0, CYAN, size=28)
+
+
+def sc_capetown(neon, crisp, s, T, info):
+    story_header(crisp, neon, s, 2, "CAPE TOWN", ["DA claims", "early victory"], CYAN)
+    p = ease_out(prog(s, 0.3, 0.9))
+    place_icon(neon, crisp, IC.table_mountain(), 540, ICON_Y + (1 - p) * 30, 0.98, p)
+    big_stat(crisp, neon, "~58%", s, info["vo_start"] + 4.6, CYAN, y=1120, size=124, label="DA'S OWN PROJECTION · NOT AN OFFICIAL RESULT")
+
+
+def sc_pin(neon, crisp, s, T, info):
+    """A town / municipality / place story: bouncing map pin."""
+    story_header(crisp, neon, s, 3, "KWAZULU-NATAL", ["MK wins its", "first council"], MAG)
+    p = pop(s)
+    ripples(neon, 540, ICON_Y + 185, s, MAG, rx=240, ry=40)
+    bounce = abs(math.sin(T * 2.4)) * 16
+    place_icon(neon, crisp, IC.map_pin(MAG), 540, ICON_Y - 15 - bounce, 0.88 * p, min(1, p * 2))
+    chip(crisp, "RICHMOND LOCAL MUNICIPALITY", 80, 1070, s, info["vo_start"] + 1.6, MAG, size=28)
+    big_stat(crisp, neon, "56%", s, info["vo_start"] + 2.6, MAG, y=1150, size=110, label="MK PARTY · 10 OF 17 SEATS")
+
+
+def sc_city(neon, crisp, s, T, info):
+    """Metro / city story: skyline (Joburg-style tower)."""
+    story_header(crisp, neon, s, 4, "GAUTENG METROS", ["DA leads Joburg,", "Tshwane tight"], BLUE)
+    p = ease_out(prog(s, 0.3, 0.9))
+    place_icon(neon, crisp, IC.skyline(BLUE), 540, ICON_Y - 30 + (1 - p) * 30, 0.95, p)
+    t0 = info["vo_start"] + 1.4
+    chip(crisp, "JOBURG · DA ~40%", 80, 1040, s, t0, BLUE, size=28)
+    chip(crisp, "EKURHULENI · DA ~41%", 80, 1125, s, t0 + 0.6, BLUE, size=28)
+    chip(crisp, "TSHWANE · ACTIONSA & ANC ~27% EACH", 80, 1210, s, info["vo_start"] + 3.8, GOLD, size=28)
+
+
+def sc_soccer(neon, crisp, s, T, info):
+    story_header(crisp, neon, s, 5, "BAFANA BAFANA", ["Squad named", "for Kenya"], GREEN)
+    p = pop(s)
+    cx = 560
+    cy = ICON_Y - 30 + 20 * abs(math.sin(T * 3))
+    for k in range(5):
+        yy = cy - 100 + k * 50
+        ln = 90 + 50 * math.sin(T * 8 + k)
+        iline(neon, (max(110, cx - 230 - ln), yy), (cx - 210, yy), col(GREEN, 0.7 * p), 3)
+    place_icon(neon, crisp, IC.soccer_ball(), cx, cy, 1.05 * p, min(1, p * 2), angle=T * 70)
+    big_stat(crisp, neon, "27-MAN SQUAD", s, info["vo_start"] + 2.0, GREEN, y=1050, size=100,
+             label="AFCON 2027 QUALIFIERS · COACH PITSO MOSIMANE")
+    x = 80
+    for i, c in enumerate(["FRI 13 NOV · ORLANDO", "TUE 17 NOV · NAIROBI"]):
+        w = chip(crisp, c, x, 1230, s, info["vo_start"] + 4.4 + i * 0.45, GOLD, size=26)
+        x += (w or 330) + 14
+
+
+def sc_court(neon, crisp, s, T, info):
+    """Courts / judgments: gavel strikes on the voiceover beat."""
+    story_header(crisp, neon, s, 2, "COURTS", ["Judgment handed", "down today"], GOLD)
+    p = ease_out(prog(s, 0.3, 0.6))
+    hit = info["vo_start"] + 1.5
+    d = s - hit
+    ang = 28 if d < -0.25 else (28 * (-d / 0.25) if d < 0 else (6 * math.exp(-d * 6) * abs(math.cos(d * 20))))
+    place_icon(neon, crisp, IC.gavel(int(round(ang))), 540, ICON_Y - 10, 1.05 * p, p)
+    if 0 <= d < 0.4:
+        icircle(neon, (575, ICON_Y + 190), 60 + d * 600, col(GOLD, (1 - d / 0.4) * 1.3), 5)
+    chip(crisp, "HIGH COURT · PRETORIA", 80, 1100, s, hit + 0.3, GOLD, size=28)
+
+
+def sc_crime(neon, crisp, s, T, info):
+    """Crime / police: flashing siren light (no graphic imagery)."""
+    story_header(crisp, neon, s, 2, "POLICE", ["Arrests after", "CIT heist"], RED)
+    p = pop(s)
+    on = "red" if int(T * 4) % 2 == 0 else "blue"
+    place_icon(neon, crisp, IC.police_light(on), 540, ICON_Y + 20, 1.15 * p, min(1, p * 2))
+    chip(crisp, "SAPS STATEMENT", 80, 1100, s, info["vo_start"] + 1.0, RED, size=28)
+
+
+def sc_power(neon, crisp, s, T, info):
+    """Electricity / load-shedding: pylon with a flashing bolt."""
+    story_header(crisp, neon, s, 3, "ESKOM", ["Load-shedding", "returns tonight"], GOLD)
+    p = ease_out(prog(s, 0.3, 0.8))
+    place_icon(neon, crisp, IC.pylon(), 470, ICON_Y, 0.85, p)
+    q = pop(s, info["vo_start"] + 1.0, 0.4)
+    flash = 1.5 if int(T * 3) % 3 == 0 else 0.8
+    place_icon(neon, crisp, IC.bolt(GOLD), 820, ICON_Y, 0.8 * q, min(1, q * 2), glow=flash)
+    big_stat(crisp, neon, "STAGE 2", s, info["vo_start"] + 2.0, GOLD, y=1110, size=110, label="FROM 18:00 UNTIL FURTHER NOTICE")
+
+
+def sc_rates(neon, crisp, s, T, info):
+    """SARB repo rate decision: dial needle swings, arrow up (hike) / down (cut)."""
+    story_header(crisp, neon, s, 3, "INTEREST RATES", ["Reserve Bank", "cuts repo rate"], GREEN)
+    p = pop(s)
+    q = ease_out(prog(s, info["vo_start"] + 0.8, 1.2))
+    ang = int(round(300 - 40 * q))  # 300 -> 260 = needle moves down (a cut)
+    place_icon(neon, crisp, IC.rate_gauge(ang), 440, ICON_Y + 20, 1.0 * p, min(1, p * 2))
+    r = pop(s, info["vo_start"] + 1.6, 0.4)
+    place_icon(neon, crisp, IC.arrow3d(up=False), 860, ICON_Y + 8 * math.sin(T * 5), 0.7 * r, min(1, r * 2))
+    big_stat(crisp, neon, "-25 BPS", s, info["vo_start"] + 2.2, GREEN, y=1110, size=110, label="REPO 6.50% · PRIME 10.00%")
+
+
+def sc_rand(neon, crisp, s, T, info):
+    """The rand / markets: floating gold R coin with an arrow."""
+    story_header(crisp, neon, s, 4, "THE RAND", ["Rand firms to", "two-week high"], GOLD)
+    p = pop(s)
+    place_icon(neon, crisp, IC.coin("R"), 460, ICON_Y + 10 * math.sin(T * 2.5), 1.0 * p, min(1, p * 2))
+    q = pop(s, info["vo_start"] + 1.2, 0.4)
+    place_icon(neon, crisp, IC.arrow3d(up=True, color=GREEN), 820, ICON_Y, 0.8 * q, min(1, q * 2))
+    big_stat(crisp, neon, "R16.45/$", s, info["vo_start"] + 2.0, GOLD, y=1110, size=110, label="STRONGEST IN TWO WEEKS")
+
+
+def sc_health(neon, crisp, s, T, info):
+    story_header(crisp, neon, s, 3, "HEALTH", ["Clinics extend", "opening hours"], RED)
+    p = pop(s)
+    beat = 1 + 0.04 * max(0, math.sin(T * 7)) ** 8
+    place_icon(neon, crisp, IC.medical(RED), 540, ICON_Y, 0.95 * p * beat, min(1, p * 2))
+    chip(crisp, "DEPARTMENT OF HEALTH", 80, 1100, s, info["vo_start"] + 1.0, RED, size=28)
+
+
+def sc_housing(neon, crisp, s, T, info):
+    story_header(crisp, neon, s, 4, "HOUSING", ["New homes handed", "over in Soweto"], CYAN)
+    p = pop(s)
+    place_icon(neon, crisp, IC.house(CYAN), 540, ICON_Y, 0.85 * p, min(1, p * 2))
+    chip(crisp, "GAUTENG HUMAN SETTLEMENTS", 80, 1100, s, info["vo_start"] + 1.0, CYAN, size=28)
+
+
+def sc_school(neon, crisp, s, T, info):
+    story_header(crisp, neon, s, 4, "EDUCATION", ["Matric exams", "start Monday"], GOLD)
+    p = pop(s)
+    place_icon(neon, crisp, IC.school(GOLD), 540, ICON_Y, 0.85 * p, min(1, p * 2))
+    big_stat(crisp, neon, "900,000+", s, info["vo_start"] + 2.0, GOLD, y=1110, size=110, label="CANDIDATES WRITING")
+
+
+def sc_trophy(neon, crisp, s, T, info):
+    story_header(crisp, neon, s, 5, "SPORT", ["Proteas win", "the series"], GOLD)
+    p = pop(s)
+    hud_ring(neon, 540, ICON_Y, 300, T, GOLD, 0.4 * p)
+    place_icon(neon, crisp, IC.trophy(GOLD), 540, ICON_Y, 0.82 * p, min(1, p * 2))
+    chip(crisp, "SERIES WON 2-1", 80, 1100, s, info["vo_start"] + 1.4, GOLD, size=28)
+
+
+def sc_world(neon, crisp, s, T, info):
+    """International / trade: two globes exchanging arrows (use IC.globe() for a single world story)."""
+    story_header(crisp, neon, s, 2, "TRADE", ["New export deal", "with the EU"], BLUE)
+    p = pop(s)
+    place_icon(neon, crisp, IC.handshake_globe(), 540, ICON_Y, 1.25 * p, min(1, p * 2))
+    chip(crisp, "DTIC STATEMENT", 80, 1100, s, info["vo_start"] + 1.4, BLUE, size=28)
+
 
 
 def sc_outro(neon, crisp, s, T, info):
