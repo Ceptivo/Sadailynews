@@ -1033,6 +1033,59 @@ def sphere(color=BLUE, label=""):
     return c.done()
 
 
+@lru_cache(maxsize=4)
+def car(color=(200, 40, 50), acc=GOLD, warn=True):
+    """SUV side view with shaded body, glass, alloy wheels and an optional warning badge. 640x420."""
+    c = Cv(640, 420)
+    c.shadow(320, 372, 270, 18, 0.6)
+    b1, b2 = lt(color, 0.25), dk(color, 0.55)
+    body = np.array([(52, 300), (56, 244), (92, 222), (170, 206), (232, 140), (262, 130), (450, 130),
+                     (488, 142), (552, 206), (590, 220), (600, 252), (596, 300), (560, 318), (80, 318)])
+    bm = c.fill(body, c.lin((0, 130), (0, 318), b1, b2))
+    # lower sill and side crease
+    c.fill([(70, 290), (590, 290), (586, 316), (80, 318)], dk(color, 0.65), 0.9)
+    c.stroke([[(70, 246), (590, 238)]], lt(color, 0.5), 2.5, 0.7, closed=False, clip=bm)
+    # glass
+    glass = [(196, 206), (246, 150), (334, 146), (334, 206)]
+    glass2 = [(348, 206), (348, 146), (444, 146), (478, 160), (526, 206)]
+    for g in (glass, glass2):
+        gm = c.fill(g, c.lin((200, 146), (500, 206), (120, 170, 215), (20, 34, 60)))
+        c.fill([(g[0][0] + 20, g[0][1] - 4), (g[1][0] + 18, g[1][1] + 6), (g[1][0] + 40, g[1][1] + 6),
+                (g[0][0] + 44, g[0][1] - 4)], WHITE, 0.25, clip=gm)
+    c.stroke([[(341, 146), (341, 300)]], dk(color, 0.6), 3, 0.8, closed=False)
+    # door handles, lights, mirror
+    for x in (290, 420):
+        c.fill(rrect(x, 228, x + 34, 236, 3), lt(color, 0.6))
+    c.fill([(578, 222), (600, 232), (598, 252), (574, 244)], (255, 236, 180))
+    c.glow_fill([(578, 222), (600, 232), (598, 252), (574, 244)], (255, 230, 160), 0.8)
+    c.fill([(54, 238), (74, 230), (76, 256), (56, 262)], (255, 60, 60))
+    c.glow_fill([(54, 238), (74, 230), (76, 256), (56, 262)], RED, 0.7)
+    c.fill([(508, 196), (530, 190), (534, 208), (512, 210)], dk(color, 0.4))
+    # roof rails + sheen
+    c.stroke([[(250, 128), (460, 128)]], (190, 195, 205), 4, closed=False)
+    c.fill(ell(330, 180, 160, 10, -2), WHITE, 0.18, clip=bm)
+    # wheels
+    for wx in (160, 486):
+        c.fill(circ(wx, 312, 58), (0, 0, 0))
+        c.fill(circ(wx, 312, 54), c.rad((wx - 15, 297), 60, (60, 62, 70), (14, 14, 18)))
+        rim = c.fill(circ(wx, 312, 32), c.rad((wx - 10, 300), 40, (230, 232, 238), (110, 114, 124)))
+        for k in range(5):
+            a = math.radians(k * 72 - 90)
+            c.stroke([[(wx, 312), (wx + 30 * math.cos(a), 312 + 30 * math.sin(a))]], (70, 74, 84), 5, closed=False)
+        c.fill(circ(wx, 312, 9), (200, 204, 212))
+        c.fill(circ(wx - 12, 300, 6), WHITE, 0.5, clip=rim)
+    c.stroke(body, lt(acc, 0.3), 2.5, glow=1.0)
+    if warn:
+        tri = [(320, 8), (392, 118), (248, 118)]
+        c.shadow(322, 124, 70, 6, 0.4, 5)
+        c.fill(tri, c.lin((320, 8), (320, 118), lt(GOLD, 0.3), dk(GOLD, 0.25)))
+        c.fill([(320, 24), (378, 110), (262, 110)], (40, 28, 6), 0.0)
+        c.text("!", 320, 78, 64, (30, 22, 6))
+        c.fill([(306, 22), (320, 8), (330, 22), (300, 46)], WHITE, 0.35)
+        c.stroke(tri, lt(GOLD, 0.4), 3, glow=1.0)
+    return c.done()
+
+
 # registry used by icon_gallery.py
 GALLERY = [
     ("ballot_box", lambda: ballot_box()), ("fuel_pump", lambda: fuel_pump()), ("arrow3d up", lambda: arrow3d(True)),
@@ -1045,5 +1098,5 @@ GALLERY = [
     ("bolt", lambda: bolt()), ("house", lambda: house()), ("medical", lambda: medical()),
     ("rate_gauge", lambda: rate_gauge(300)), ("coin", lambda: coin()), ("globe", lambda: globe()),
     ("school", lambda: school()), ("handshake_globe", lambda: handshake_globe()),
-    ("sphere", lambda: sphere(GREEN, "ZA")),
+    ("sphere", lambda: sphere(GREEN, "ZA")), ("car", lambda: car()),
 ]
